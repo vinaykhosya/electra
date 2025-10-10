@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -C client build && tsx watch ./server/node-build.ts",
-    "start": "node ./server/dist/node-build.js",
+    "start": "node ./server/build/node-build.js",
     "build": "pnpm --filter client build && pnpm --filter server build",
     "test": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
