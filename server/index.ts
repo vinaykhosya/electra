@@ -22,7 +22,8 @@ if (process.env.SKIP_DB_SETUP !== "true") {
 export function createServer() {
   const app = express();
 
-  app.use(cors());
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+app.use(cors({ origin: frontendUrl }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
