@@ -12,9 +12,9 @@
     "allowJs": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["shared/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.js"],
+  "include": ["**/*.ts", "**/*.js", "../shared/api.ts"],
   "exclude": ["node_modules"]
 }

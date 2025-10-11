@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, QueryResultRow } from "pg";
 
 const connectionString = process.env.SUPABASE_DB_URL;
 
@@ -8,7 +8,7 @@ if (!connectionString) {
 
 export const pool = new Pool({ connectionString });
 
-export const runQuery = <T>(text: string, params: unknown[] = []) =>
+export const runQuery = <T extends QueryResultRow>(text: string, params: unknown[] = []) =>
   pool.query<T>(text, params);
 
 export async function withTransaction<T>(

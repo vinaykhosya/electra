@@ -29,13 +29,13 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./client/*"],
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["server/shared/*"]
     }
   },
   "include": [
     "client/**/*",
     "server/**/*",
-    "shared/**/*",
+    "server/shared/**/*",
     "vite.config.ts",
     "vite.config.server.ts"
   ],
