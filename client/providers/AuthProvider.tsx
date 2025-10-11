@@ -8,7 +8,6 @@ import {
   useState,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-// --- THIS IMPORT PATH HAS BEEN RESTORED TO THE CORRECT ALIAS ---
 import { supabase } from "@/lib/supabaseClient";
 
 export interface UserProfile {
@@ -47,57 +46,27 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function ensureProfile(user: User, fullName?: string) {
-  const now = new Date().toISOString();
-  const upsert = await supabase
+async function ensureProfile(user: User) {
+  const { data } = await supabase
     .from("users")
-    .upsert({
-      id: user.id,
-      full_name: fullName ?? user.user_metadata?.full_name ?? null,
-      avatar_url: user.user_metadata?.avatar_url ?? null,
-      updated_at: now,
-    })
-    .select()
-    .single();
-
-  if (upsert.error) {
-    throw upsert.error;
-  }
-
-  const homes = await supabase
-    .from("homes")
     .select("id")
-    .eq("owner_id", user.id)
-    .limit(1)
+    .eq("id", user.id)
     .maybeSingle();
 
-  if (homes.error) {
-    throw homes.error;
-  }
-
-  if (!homes.data) {
-    const homeInsert = await supabase
-      .from("homes")
-      .insert({ name: "Primary Residence", owner_id: user.id })
-      .select("id")
+  if (!data) {
+    const { data: profile, error } = await supabase
+      .from("users")
+      .insert({
+        id: user.id,
+        full_name: user.user_metadata?.full_name ?? null,
+        avatar_url: user.user_metadata?.avatar_url ?? null,
+      })
+      .select()
       .single();
-
-    if (homeInsert.error) {
-      throw homeInsert.error;
-    }
-
-    const membership = await supabase.from("home_members").insert({
-      home_id: homeInsert.data.id,
-      user_id: user.id,
-      role: "owner",
-    });
-
-    if (membership.error) {
-      throw membership.error;
-    }
+    if (error) throw error;
+    return profile as UserProfile;
   }
-
-  return upsert.data as UserProfile;
+  return data as UserProfile;
 }
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -199,7 +168,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     password,
     fullName,
   }) => {
-    const { data, error } = await supabase.auth.signUp({
+    // We only call signUp and pass the fullName in the metadata.
+    // The database trigger will automatically handle creating the profile.
+    const { error } = await supabase.auth.signUp({
       email: normalizeEmail(email),
       password: normalizePassword(password),
       options: {
@@ -211,22 +182,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { error: translateAuthError(error.message) };
     }
 
-    const user = data.user;
-    if (user) {
-      try {
-        const profileRecord = await ensureProfile(user, fullName);
-        setProfile(profileRecord);
-      } catch (profileError) {
-        console.error("profile upsert failed", profileError);
-        return {
-          error:
-            profileError instanceof Error
-              ? profileError.message
-              : "Unable to complete profile setup",
-        };
-      }
-    }
-
+    // The manual profile creation is removed from here. It's all done on the backend now!
     return {};
   }, []);
 
@@ -248,7 +204,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [session, profile, loading, signIn, signUp, signOut],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{children}</Auth.Provider>;
 };
 
 export function useAuth() {
@@ -258,4 +214,3 @@ export function useAuth() {
   }
   return context;
 }
-
