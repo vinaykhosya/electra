@@ -1,4 +1,4 @@
-import { ComponentType, useMemo } from "react";
+import { ComponentType, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,18 +27,20 @@ import {
   Appliance,
   ApplianceEvent,
   UsageAnalyticsPoint,
+  createHome,
   fetchRecentNotifications,
   fetchUsageAnalytics,
   listAppliances,
   toggleApplianceStatus,
 } from "@/lib/api";
-import { usePrimaryHome } from "@/hooks/usePrimaryHome";
+import { PRIMARY_HOME_QUERY_KEY, usePrimaryHome } from "@/hooks/usePrimaryHome";
 import { cn } from "@/lib/utils";
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip } from "recharts";
 
 import { AddDeviceForm } from "@/components/AddDeviceForm";
-// --- 1. IMPORT THE NEW AI CHAT COMPONENT ---
-import { RecipeAI } from "@/components/RecipeAI";
+import { PendingInvitations } from "@/components/PendingInvitations";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 
 const APPLIANCES_QUERY_KEY = ["appliances"] as const;
@@ -46,8 +48,8 @@ const ANALYTICS_QUERY_KEY = ["usage-analytics"] as const;
 const NOTIFICATIONS_QUERY_KEY = ["notifications"] as const;
 
 export default function Dashboard() {
-  const { session, profile } = useAuth();
-  const { data: home } = usePrimaryHome();
+  const { session, profile, user } = useAuth();
+  const { data: home, isLoading: isHomeLoading } = usePrimaryHome();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -86,6 +88,21 @@ export default function Dashboard() {
     },
   });
 
+  const createHomeMutation = useMutation({
+    mutationFn: (name: string) => createHome(name, user!.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [PRIMARY_HOME_QUERY_KEY, user?.id] });
+      toast({ title: "Home created successfully!" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create home",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const appliances = appliancesQuery.data ?? [];
   const usage = usageQuery.data ?? [];
   const notifications = notificationsQuery.data ?? [];
@@ -109,8 +126,23 @@ export default function Dashboard() {
   const quickControls = appliances.slice(0, 4);
   const recentEvents = notifications.slice(0, 5);
 
+  if (isHomeLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">Loading your home...</p>
+      </div>
+    );
+  }
+
+  if (!home) {
+    return <CreateHomeForm mutation={createHomeMutation} />;
+  }
+
   return (
     <div className="space-y-8">
+      {/* Pending Invitations */}
+      <PendingInvitations />
+      
       <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Card className="relative overflow-hidden border-none bg-gradient-to-br from-primary/15 via-primary/5 to-background">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.25),transparent_65%)]" />
@@ -188,10 +220,7 @@ export default function Dashboard() {
         </Card>
       </section>
       
-      {/* --- 2. ADD THE NEW SECTION FOR THE AI ASSISTANT --- */}
-      <section>
-        <RecipeAI />
-      </section>
+
 
       <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Card className="border-border/60 bg-card/80 backdrop-blur">
@@ -244,6 +273,46 @@ export default function Dashboard() {
         </Card>
       </section>
 
+    </div>
+  );
+}
+
+function CreateHomeForm({ mutation }: { mutation: any }) {
+  const [name, setName] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) {
+      mutation.mutate(name.trim());
+    }
+  };
+
+  return (
+    <div className="flex h-full items-center justify-center">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Create your Home</CardTitle>
+          <CardDescription>
+            You need a home to manage your devices.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="home-name">Home Name</Label>
+              <Input
+                id="home-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., My Smart Home"
+              />
+            </div>
+            <Button type="submit" disabled={mutation.isPending} className="w-full">
+              {mutation.isPending ? "Creating..." : "Create Home"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -380,4 +449,3 @@ function UsageChart({ data }: UsageChartProps) {
     </ResponsiveContainer>
   );
 }
-

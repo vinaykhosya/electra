@@ -37,6 +37,7 @@ type AuthContextValue = {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  role: string | null; // Added role
   signIn: (params: { email: string; password: string }) => Promise<{ error?: string }>;
   signUp: (
     params: { email: string; password: string; fullName: string }
@@ -72,6 +73,7 @@ async function ensureProfile(user: User) {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [role, setRole] = useState<string | null>(null); // Added role state
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -100,9 +102,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  const fetchRole = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('home_members')
+      .select('role')
+      .eq('user_id', userId)
+      .single(); // Assuming a user is only in one home for now
+
+    if (error) {
+      console.error('Error fetching user role', error);
+      return;
+    }
+
+    if (data) {
+      setRole(data.role);
+    }
+  };
+
   useEffect(() => {
     if (!session?.user) {
       setProfile(null);
+      setRole(null); // Reset role
       setLoading(false);
       return;
     }
@@ -128,6 +148,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const created = await ensureProfile(session.user);
           if (!cancelled) {
             setProfile(created);
+            if (created) {
+              void fetchRole(created.id);
+            }
           }
         } catch (creationError) {
           console.error("ensureProfile error", creationError);
@@ -141,6 +164,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (!cancelled) {
         setProfile(data as UserProfile);
+        if (data) {
+          void fetchRole(data.id);
+        }
         setLoading(false);
       }
     };
@@ -168,9 +194,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     password,
     fullName,
   }) => {
-    // We only call signUp and pass the fullName in the metadata.
-    // The database trigger will automatically handle creating the profile.
-    const { error } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email: normalizeEmail(email),
       password: normalizePassword(password),
       options: {
@@ -178,17 +202,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       },
     });
 
-    if (error) {
-      return { error: translateAuthError(error.message) };
+    if (authError) {
+      return { error: translateAuthError(authError.message) };
     }
 
-    // The manual profile creation is removed from here. It's all done on the backend now!
-    return {};
+    const user = authData.user;
+    if (!user) {
+      return { error: "Signup succeeded but no user was returned. Please try signing in." };
+    }
+
+    try {
+      // Create the home
+      const { data: home, error: homeError } = await supabase
+        .from("homes")
+        .insert({ name: `${fullName}'s Home`, owner_id: user.id })
+        .select()
+        .single();
+
+      if (homeError) {
+        console.error("Error creating home:", homeError);
+        return { error: "Your account was created, but we failed to set up your primary home." };
+      }
+
+      // Add user to the home as an owner
+      const { error: membershipError } = await supabase.from("home_members").insert({
+        home_id: home.id,
+        user_id: user.id,
+        role: "owner",
+      });
+
+      if (membershipError) {
+        console.error("Error creating home membership:", membershipError);
+        return { error: "Your account was created, but we failed to add you to your primary home." };
+      }
+
+      return {};
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "An unknown error occurred.";
+      console.error("Error in signup supplemental actions:", message);
+      return { error: "Your account was created, but we failed to complete your home setup." };
+    }
   }, []);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setRole(null); // Reset role
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -197,11 +256,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       user: session?.user ?? null,
       profile,
       loading,
+      role, // Added role
       signIn,
       signUp,
       signOut,
     }),
-    [session, profile, loading, signIn, signUp, signOut],
+    [session, profile, loading, role, signIn, signUp, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

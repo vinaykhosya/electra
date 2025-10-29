@@ -16,7 +16,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable read access for home members' AND tablename = 'homes'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable read access for home members' AND tablename = 'homes'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable read access for home members"
         ON public.homes FOR SELECT
@@ -31,7 +31,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable home creation for owners' AND tablename = 'homes'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable home creation for owners' AND tablename = 'homes'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable home creation for owners"
         ON public.homes FOR INSERT
@@ -42,7 +42,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable home updates for owners' AND tablename = 'homes'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable home updates for owners' AND tablename = 'homes'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable home updates for owners"
         ON public.homes FOR UPDATE
@@ -54,15 +54,12 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable read access for members and owners' AND tablename = 'home_members'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable read access for members and owners' AND tablename = 'home_members'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable read access for members and owners"
         ON public.home_members FOR SELECT
         USING (
-          user_id = auth.uid() OR
-          home_id IN (
-            SELECT home_id FROM home_members WHERE user_id = auth.uid() AND role = ''owner''
-          )
+          home_id IN (SELECT home_id FROM home_members WHERE user_id = auth.uid())
         )';
     END IF;
   END
@@ -70,7 +67,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable membership insert for owners' AND tablename = 'home_members'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable membership insert for owners' AND tablename = 'home_members'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable membership insert for owners"
         ON public.home_members FOR INSERT
@@ -87,7 +84,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable membership updates for owners' AND tablename = 'home_members'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable membership updates for owners' AND tablename = 'home_members'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable membership updates for owners"
         ON public.home_members FOR UPDATE
@@ -111,7 +108,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable appliance write access for owners and permitted members' AND tablename = 'appliances'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable appliance write access for owners and permitted members' AND tablename = 'appliances'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable appliance write access for owners and permitted members"
         ON public.appliances FOR ALL
@@ -153,7 +150,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable appliance read access for owners and permitted members' AND tablename = 'appliances'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable appliance read access for owners and permitted members' AND tablename = 'appliances'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable appliance read access for owners and permitted members"
         ON public.appliances FOR SELECT
@@ -179,7 +176,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable schedule access for authorized users' AND tablename = 'schedules'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable schedule access for authorized users' AND tablename = 'schedules'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable schedule access for authorized users"
         ON public.schedules FOR ALL
@@ -209,7 +206,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable permissions access for owners and members' AND tablename = 'appliance_permissions'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable permissions access for owners and members' AND tablename = 'appliance_permissions'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable permissions access for owners and members"
         ON public.appliance_permissions FOR ALL
@@ -242,7 +239,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable appliance event access for authorized users' AND tablename = 'appliance_events'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable appliance event access for authorized users' AND tablename = 'appliance_events'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable appliance event access for authorized users"
         ON public.appliance_events FOR ALL
@@ -272,7 +269,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable profile read access' AND tablename = 'users'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable profile read access' AND tablename = 'users'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable profile read access"
         ON public.users FOR SELECT
@@ -283,7 +280,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable profile insert' AND tablename = 'users'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable profile insert' AND tablename = 'users'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable profile insert"
         ON public.users FOR INSERT
@@ -294,7 +291,7 @@ const policyStatements = [
   `DO $$
   BEGIN
     IF NOT EXISTS (
-      SELECT 1 FROM pg_policies WHERE polname = 'Enable profile update' AND tablename = 'users'
+      SELECT 1 FROM pg_policies WHERE policyname = 'Enable profile update' AND tablename = 'users'
     ) THEN
       EXECUTE 'CREATE POLICY "Enable profile update"
         ON public.users FOR UPDATE

@@ -7,9 +7,15 @@ import {
   BellRing,
   Settings,
   Menu,
+  CalendarClock,
+  Bot,
+  Shield,
+  Key,
+  Home,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import FloatingElleyButton from "@/components/ui/floating-elley";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Avatar,
@@ -20,22 +26,35 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthProvider";
-import { usePrimaryHome } from "@/hooks/usePrimaryHome";
+import { usePrimaryHome, type PrimaryHome } from "@/hooks/usePrimaryHome";
 
 const navigation = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Devices", to: "/devices", icon: Plug },
+  { label: "Schedules", to: "/schedules", icon: CalendarClock },
   { label: "Analytics", to: "/analytics", icon: BarChart3 },
   { label: "Notifications", to: "/notifications", icon: BellRing },
+  { label: "Home Settings", to: "/home-settings", icon: Home },
   { label: "Settings", to: "/settings", icon: Settings },
+  { label: "Parental Controls", to: "/parental-controls", icon: Shield },
+  { label: "Permissions", to: "/permissions", icon: Key },
+  { label: "Elley", to: "/elley", icon: Bot },
 ] as const;
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
+  const { role } = useAuth();
+
+  const filteredNavigation = navigation.filter(item => {
+    if (item.label === "Parental Controls" || item.label === "Permissions") {
+      return role === 'owner' || role === 'adult';
+    }
+    return true;
+  });
 
   return (
     <nav className="mt-6 flex flex-1 flex-col gap-1">
-      {navigation.map((item) => {
+      {filteredNavigation.map((item) => {
         const Icon = item.icon;
         const isActive =
           item.to === "/devices"
@@ -65,10 +84,8 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function DesktopSidebar() {
+function DesktopSidebar({ home }: { home: PrimaryHome | null | undefined }) {
   const { profile } = useAuth();
-
-  const { data: home } = usePrimaryHome();
 
   return (
     <aside className="relative hidden w-[280px] shrink-0 flex-col border-r border-border/30 bg-sidebar pb-6 pt-8 text-sidebar-foreground lg:flex">
@@ -139,7 +156,7 @@ export const AppShell = () => {
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-background via-secondary/40 to-background">
-      <DesktopSidebar />
+      <DesktopSidebar home={home} />
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="left"
@@ -203,6 +220,8 @@ export const AppShell = () => {
               </Button>
             </div>
           </footer>
+          {/* Floating Elley button shown across the app */}
+          <FloatingElleyButton />
         </div>
       </Sheet>
     </div>

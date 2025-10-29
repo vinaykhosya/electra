@@ -5,8 +5,8 @@
   "description": "A modern, full-stack starter template powered by Vite, React, TypeScript, and Express.",
   "type": "module",
   "scripts": {
-    "dev": "pnpm -C client build && tsx watch ./server/node-build.ts",
-    "start": "node ./server/build/node-build.js",
+    "dev": "pnpm -C client build && tsx watch --env-file=./server/.env ./server/node-build.ts",
+    "start": "node ./server/dist/index.js",
     "build": "pnpm --filter client build && pnpm --filter server build",
     "test": "vitest",
     "lint": "eslint . --ext .ts,.tsx",

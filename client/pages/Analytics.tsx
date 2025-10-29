@@ -1,4 +1,4 @@
-import { ComponentType, useMemo, useState } from "react";
+import { ComponentType, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
@@ -24,16 +24,52 @@ import { useAuth } from "@/providers/AuthProvider";
 import { fetchUsageAnalytics } from "@/lib/api";
 
 const ANALYTICS_QUERY_KEY = ["usage-analytics"] as const;
+const MAX_LIVE_DATA_POINTS = 50;
+
+type LiveEvent = {
+  appliance_id: number;
+  power_usage: number;
+  recorded_at: string;
+};
 
 export default function Analytics() {
   const { session } = useAuth();
   const [range, setRange] = useState<"7d" | "30d">("30d");
+  const [liveData, setLiveData] = useState<LiveEvent[]>([]);
 
   const analyticsQuery = useQuery({
     queryKey: ANALYTICS_QUERY_KEY,
     queryFn: () => fetchUsageAnalytics(session!.access_token!),
     enabled: Boolean(session?.access_token),
   });
+
+  useEffect(() => {
+    const eventSource = new EventSource("/api/analytics/stream");
+
+    eventSource.onmessage = (event) => {
+      try {
+        const newEvent = JSON.parse(event.data) as LiveEvent;
+        setLiveData((prevData) => {
+          const newData = [...prevData, newEvent];
+          if (newData.length > MAX_LIVE_DATA_POINTS) {
+            return newData.slice(newData.length - MAX_LIVE_DATA_POINTS);
+          }
+          return newData;
+        });
+      } catch (error) {
+        console.error("Failed to parse SSE event:", error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE Error:", error);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
 
   const data = useMemo(() => {
     const all = analyticsQuery.data ?? [];
@@ -44,6 +80,7 @@ export default function Analytics() {
   }, [analyticsQuery.data, range]);
 
   const summary = useMemo(() => computeSummary(analyticsQuery.data ?? []), [analyticsQuery.data]);
+  const currentLoad = liveData.length > 0 ? liveData[liveData.length - 1].power_usage : 0;
 
   return (
     <div className="space-y-8">
@@ -55,11 +92,54 @@ export default function Analytics() {
       </header>
 
       <section className="grid gap-4 md:grid-cols-4">
-        <StatTile icon={Zap} label="Peak load" value={`${summary.peakLoad} W`} caption={`Max recorded ${summary.peakDate}`} />
+        <StatTile icon={Zap} label="Current Load" value={`${currentLoad} W`} caption={`Live from ESP32`} />
         <StatTile icon={Flame} label="Avg. daily draw" value={`${summary.avgDaily} W`} caption="Across selected range" />
         <StatTile icon={Gauge} label="On cycles" value={`${summary.onEvents}`} caption="Switch-ons logged" />
         <StatTile icon={Layers} label="Automation efficacy" value={`${summary.automationScore}%`} caption="Schedules vs manual" />
       </section>
+
+      <Card className="border-border/60 bg-card/80 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Zap className="h-5 w-5 text-primary" />
+            Live Load
+          </CardTitle>
+          <CardDescription>Real-time power consumption from active devices.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={liveData} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="liveGradient" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))/0.2" />
+              <XAxis
+                dataKey="recorded_at"
+                tickFormatter={(value) => new Date(value).toLocaleTimeString()}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <YAxis
+                stroke="hsl(var(--muted-foreground))"
+                tickFormatter={(value) => `${value} W`}
+                domain={[0, 'dataMax + 50']}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "hsl(var(--card))",
+                  borderRadius: "1rem",
+                  border: "1px solid hsl(var(--border))",
+                }}
+                labelFormatter={(value) => new Date(value).toLocaleTimeString()}
+                formatter={(value: number) => [`${value} W`, "Power"]}
+              />
+              <Area type="monotone" dataKey="power_usage" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#liveGradient)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       <Card className="border-border/60 bg-card/80 backdrop-blur">
         <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

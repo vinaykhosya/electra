@@ -7,6 +7,8 @@ export type Appliance = {
   power_usage: number | null;
   home_id: number | null;
   created_at: string | null;
+  last_turned_on: string | null;
+  total_usage_ms: number | null;
 };
 
 export type ApplianceEvent = {
@@ -291,3 +293,68 @@ export async function setAppliancePermission(
     }
   }
 }
+
+export async function createHome(name: string, owner_id: string) {
+  const { data, error } = await supabase
+    .from("homes")
+    .insert({ name, owner_id })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const { error: memberError } = await supabase.from("home_members").insert({
+    home_id: data.id,
+    user_id: owner_id,
+    role: "owner",
+  });
+
+  if (memberError) {
+    throw new Error(memberError.message);
+  }
+
+  return data;
+}
+
+export const api = {
+  post: async <T>(path: string, body: any) => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error("User not authenticated");
+    }
+    return authorizedFetch<T>(path, session.access_token, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  get: async <T>(path: string) => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error("User not authenticated");
+    }
+    return authorizedFetch<T>(path, session.access_token, {
+      method: "GET",
+    });
+  },
+  delete: async <T>(path: string) => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error("User not authenticated");
+    }
+    return authorizedFetch<T>(path, session.access_token, {
+      method: "DELETE",
+    });
+  },
+  put: async <T>(path: string, body: any) => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error("User not authenticated");
+    }
+    return authorizedFetch<T>(path, session.access_token, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  },
+};

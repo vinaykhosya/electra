@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/providers/AuthProvider';
 
 // Define the structure for the API response
 interface RegistrationResult {
@@ -7,6 +8,7 @@ interface RegistrationResult {
 }
 
 export const AddDeviceForm: React.FC = () => {
+  const { session } = useAuth();
   // State for form inputs
   const [deviceName, setDeviceName] = useState('');
   const [macAddress, setMacAddress] = useState('');
@@ -37,6 +39,7 @@ export const AddDeviceForm: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({ deviceName, macAddress }),
       });

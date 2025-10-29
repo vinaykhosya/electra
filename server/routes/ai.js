@@ -1,53 +1,35 @@
-import express from 'express';
-import http from 'http'; // Using Node's built-in HTTP module for streaming
+const express = require('express');
+const axios = require('axios');
 
 const router = express.Router();
 
-// Configuration for connecting to your Python AI server
-const AI_SERVER_OPTIONS = {
-  hostname: '127.0.0.1',
-  port: 8000,
-  path: '/ask-stream',
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  }
-};
-
-router.post('/recipe-stream', (req, res) => {
+// Proxy /recipe-stream to FastAPI /ask-stream (Elley logic)
+router.post('/recipe-stream', async (req, res) => {
   const { query } = req.body;
-
   if (!query) {
     return res.status(400).json({ error: 'Query is required.' });
   }
-
-  console.log(`Forwarding STREAMING query to AI service: "${query}"`);
-
-  // Create a request to the Python AI server
-  const proxyReq = http.request(AI_SERVER_OPTIONS, (proxyRes) => {
-    // Set the headers for the client's response to enable streaming
-    res.writeHead(proxyRes.statusCode, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+  try {
+    const response = await axios.post('http://127.0.0.1:8000/ask-stream', { query }, {
+      responseType: 'stream',
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    // Pipe the data from the AI server directly back to the client
-    proxyRes.pipe(res);
-  });
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-  // Handle any errors during the connection to the AI server
-  proxyReq.on('error', (err) => {
-    console.error('Error communicating with the AI service:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Failed to connect to the AI service.' });
+    response.data.pipe(res);
+    response.data.on('end', () => res.end());
+    response.data.on('error', () => res.end());
+  } catch (error) {
+    console.error('Error proxying to Elley AI service:', error.message);
+    if (error.response) {
+      res.status(error.response.status).json(error.response.data);
+    } else {
+      res.status(500).json({ error: 'Failed to communicate with Elley AI service.' });
     }
-  });
-
-  // Send the user's query in the request body to the Python server
-  proxyReq.write(JSON.stringify({ query }));
-  proxyReq.end();
+  }
 });
 
-export default router;
-
+module.exports = router;

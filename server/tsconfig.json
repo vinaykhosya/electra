@@ -2,7 +2,7 @@
   "compilerOptions": {
     "module": "CommonJS",
     "target": "ES2020",
-    "outDir": "./build",
+    "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
@@ -15,6 +15,6 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.js", "../shared/api.ts"],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts", "../shared/api.ts"],
+  "exclude": ["node_modules", "dist"]
 }

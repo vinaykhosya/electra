@@ -1,12 +1,17 @@
 import { Pool, QueryResultRow } from "pg";
 
-const connectionString = process.env.SUPABASE_DB_URL;
+const connectionString = process.env.POSTGRES_URL;
 
 if (!connectionString) {
-  throw new Error("Missing SUPABASE_DB_URL environment variable");
+  throw new Error("Missing POSTGRES_URL environment variable");
 }
 
-export const pool = new Pool({ connectionString });
+export const pool = new Pool({
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
 export const runQuery = <T extends QueryResultRow>(text: string, params: unknown[] = []) =>
   pool.query<T>(text, params);

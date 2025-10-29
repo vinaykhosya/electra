@@ -13,7 +13,7 @@ type Message = {
 
 export function RecipeAI() {
   const [messages, setMessages] = useState<Message[]>([
-    { sender: 'ai', text: "Hello! I'm Electra_AI. How can I help you in the kitchen today?" }
+    { sender: 'ai', text: "Hello! I'm Elley. How can I help you in the kitchen today?" }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -78,7 +78,7 @@ export function RecipeAI() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Bot className="h-5 w-5 text-primary" />
-          Electra_AI Assistant
+          Elley Assistant
         </CardTitle>
         <CardDescription>
           Your smart culinary partner. Ask for recipes, cooking tips, and more.

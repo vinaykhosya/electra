@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: './server/.env' });
+
 import path from "path";
 import { createServer } from "./index";
 import * as express from "express";
@@ -9,7 +12,7 @@ const host = "0.0.0.0"; // Important for hosting platforms like Render
 // This path now correctly points to the 'dist' folder inside the 'client' directory,
 // where the final built frontend files will be located after the build command runs.
 // const __dirname = import.meta.dirname;
-const distPath = path.join(__dirname, "../../client/dist");
+const distPath = path.join(__dirname, "../client/dist");
 
 // Serve static assets (like CSS, JS, images) from that correct directory.
 app.use(express.static(distPath));

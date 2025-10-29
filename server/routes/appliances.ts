@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { runQuery } from "../lib/db";
+import { broadcast } from "../lib/streaming";
 
 async function authenticateRequest(req: Parameters<RequestHandler>[0]) {
   const authHeader = req.headers.authorization;
@@ -25,7 +26,7 @@ const ensureAccessQuery = `
     WHERE a.id = $1
       AND hm.user_id = $2
       AND (
-        hm.role = 'owner' OR EXISTS (
+        hm.role = 'owner' OR hm.role = 'adult' OR EXISTS (
           SELECT 1 FROM appliance_permissions ap
           WHERE ap.appliance_id = a.id
             AND ap.home_member_id = hm.id
@@ -153,7 +154,7 @@ export const getApplianceActivity: RequestHandler = async (req, res) => {
         WHERE ae.appliance_id = $1
           AND hm.user_id = $2
           AND (
-            hm.role = 'owner' OR EXISTS (
+            hm.role = 'owner' OR hm.role = 'adult' OR EXISTS (
               SELECT 1 FROM appliance_permissions ap
                WHERE ap.appliance_id = ae.appliance_id
                  AND ap.home_member_id = hm.id
@@ -167,6 +168,58 @@ export const getApplianceActivity: RequestHandler = async (req, res) => {
     return res.json({ events });
   } catch (error) {
     console.error("getApplianceActivity error", error);
+    return res.status(500).json({ message: "Unexpected server error" });
+  }
+};
+
+export const ingestDeviceData: RequestHandler = async (req, res) => {
+  try {
+    const applianceIdFromToken = req.applianceId;
+    const applianceIdFromParams = Number.parseInt(req.params.id, 10);
+
+    if (Number.isNaN(applianceIdFromParams)) {
+      return res.status(400).json({ message: "Invalid appliance id" });
+    }
+
+    // Ensure a device can only post data for itself
+    if (applianceIdFromToken !== applianceIdFromParams) {
+      return res.status(403).json({ message: "Forbidden: Device ID mismatch" });
+    }
+
+    const incomingPower =
+      typeof req.body?.powerUsage === "number"
+        ? req.body.powerUsage
+        : Number.parseFloat(req.body?.powerUsage ?? "");
+
+    if (!Number.isFinite(incomingPower)) {
+      return res.status(400).json({ message: "Invalid or missing powerUsage" });
+    }
+
+    const powerUsage = Math.max(0, Math.round(incomingPower));
+
+    // Insert the new event
+    const { rows: newEvents } = await runQuery<{
+      id: number;
+      appliance_id: number;
+      status: string;
+      power_usage: number;
+      recorded_at: string;
+      user_id: string | null;
+    }>(
+      `INSERT INTO appliance_events (appliance_id, status, power_usage)
+       VALUES ($1, 'data', $2)
+       RETURNING *`,
+      [applianceIdFromParams, powerUsage]
+    );
+
+    const newEvent = newEvents[0];
+
+    // Broadcast the new event to all connected SSE clients
+    broadcast(newEvent);
+
+    return res.status(201).json({ message: "Data ingested", event: newEvent });
+  } catch (error) {
+    console.error("ingestDeviceData error", error);
     return res.status(500).json({ message: "Unexpected server error" });
   }
 };

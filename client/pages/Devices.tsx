@@ -2,13 +2,12 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  CircleCheck,
   CirclePower,
   Filter,
   Lightbulb,
-  Plus,
   Power,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -23,38 +22,25 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { api } from "@/lib/api";
 import {
   Appliance,
   listAppliances,
-  listHomes,
   toggleApplianceStatus,
 } from "@/lib/api";
 import { usePrimaryHome } from "@/hooks/usePrimaryHome";
+import { DeleteWithPinModal } from "@/components/DeleteWithPinModal";
 
 const APPLIANCES_QUERY_KEY = ["appliances"] as const;
-const HOMES_QUERY_KEY = ["homes"] as const;
 
 export default function Devices() {
   const { session } = useAuth();
   const { data: home } = usePrimaryHome();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [newDeviceName, setNewDeviceName] = useState("");
+  const [deviceToDelete, setDeviceToDelete] = useState<Appliance | null>(null);
 
   const appliancesQuery = useQuery({
     queryKey: APPLIANCES_QUERY_KEY,
@@ -62,11 +48,8 @@ export default function Devices() {
     enabled: Boolean(session?.user),
   });
 
-  const homesQuery = useQuery({
-    queryKey: HOMES_QUERY_KEY,
-    queryFn: listHomes,
-    enabled: Boolean(session?.user),
-  });
+  console.log("Appliances:", appliancesQuery.data);
+  console.log("Error:", appliancesQuery.error);
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: "on" | "off" }) =>
@@ -84,41 +67,6 @@ export default function Devices() {
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      if (!newDeviceName.trim()) {
-        throw new Error("Device name is required");
-      }
-
-      const selectedHomeId = home?.homeId ?? homesQuery.data?.[0]?.id;
-      if (!selectedHomeId) {
-        throw new Error("Please create a home before adding devices");
-      }
-
-      const { error } = await supabaseInsertAppliance({
-        name: newDeviceName.trim(),
-        home_id: selectedHomeId,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-    },
-    onSuccess: () => {
-      setAddDialogOpen(false);
-      setNewDeviceName("");
-      toast({ title: "Appliance added", description: "Assign permissions from Settings to keep it safe." });
-      void queryClient.invalidateQueries({ queryKey: APPLIANCES_QUERY_KEY });
-    },
-    onError: (error) => {
-      toast({
-        title: "Unable to add appliance",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    },
-  });
-
   const appliances = appliancesQuery.data ?? [];
 
   const onDevices = useMemo(
@@ -129,6 +77,34 @@ export default function Devices() {
     () => appliances.filter((device) => device.status === "off"),
     [appliances],
   );
+
+  const handleDelete = (device: Appliance) => {
+    setDeviceToDelete(device);
+  };
+
+  const handleConfirmDelete = async (pin: string) => {
+    if (!deviceToDelete) {
+      throw new Error('No device selected');
+    }
+
+    const response = await api.post<{ success: boolean }>(
+      `/api/v2/devices/${deviceToDelete.id}/delete-with-pin`,
+      {
+        security_pin: pin,
+      }
+    );
+
+    if (response.success) {
+      toast({
+        title: 'Device Deleted',
+        description: `${deviceToDelete.name} has been removed`,
+      });
+      await queryClient.invalidateQueries({ queryKey: APPLIANCES_QUERY_KEY });
+      setDeviceToDelete(null);
+    } else {
+      throw new Error('Failed to delete device');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -146,44 +122,6 @@ export default function Devices() {
               Analyze usage
             </Link>
           </Button>
-          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add appliance
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Register a new appliance</DialogTitle>
-                <DialogDescription>
-                  Smart outlets, lighting, HVAC, and more. Owners can later delegate access via parental controls.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                  <Label htmlFor="device-name">Device name</Label>
-                  <Input
-                    id="device-name"
-                    placeholder="Living room air purifier"
-                    value={newDeviceName}
-                    onChange={(event) => setNewDeviceName(event.target.value)}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  onClick={() => createMutation.mutate()}
-                  disabled={createMutation.isPending}
-                  className="gap-2"
-                >
-                  <CircleCheck className="h-4 w-4" />
-                  Save appliance
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       </header>
 
@@ -198,6 +136,7 @@ export default function Devices() {
             devices={appliances}
             emptyMessage="No appliances yet. Add your first device to start monitoring."
             onToggle={(appliance, status) => toggleMutation.mutate({ id: appliance.id, status })}
+            onDelete={handleDelete}
             loading={toggleMutation.isPending}
           />
         </TabsContent>
@@ -206,6 +145,7 @@ export default function Devices() {
             devices={onDevices}
             emptyMessage="Nothing is drawing power right now."
             onToggle={(appliance, status) => toggleMutation.mutate({ id: appliance.id, status })}
+            onDelete={handleDelete}
             loading={toggleMutation.isPending}
           />
         </TabsContent>
@@ -214,10 +154,20 @@ export default function Devices() {
             devices={offDevices}
             emptyMessage="No devices are idle currently."
             onToggle={(appliance, status) => toggleMutation.mutate({ id: appliance.id, status })}
+            onDelete={handleDelete}
             loading={toggleMutation.isPending}
           />
         </TabsContent>
       </Tabs>
+
+      <DeleteWithPinModal
+        open={deviceToDelete !== null}
+        onOpenChange={() => setDeviceToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Device"
+        description="This action cannot be undone. The device will be permanently removed from your home."
+        deviceName={deviceToDelete?.name}
+      />
     </div>
   );
 }
@@ -227,9 +177,10 @@ type DeviceGridProps = {
   emptyMessage: string;
   loading: boolean;
   onToggle: (device: Appliance, status: "on" | "off") => void;
+  onDelete: (device: Appliance) => void;
 };
 
-function DeviceGrid({ devices, emptyMessage, loading, onToggle }: DeviceGridProps) {
+function DeviceGrid({ devices, emptyMessage, loading, onToggle, onDelete }: DeviceGridProps) {
   if (devices.length === 0) {
     return <EmptyState message={emptyMessage} />;
   }
@@ -242,6 +193,7 @@ function DeviceGrid({ devices, emptyMessage, loading, onToggle }: DeviceGridProp
           appliance={device}
           loading={loading}
           onToggle={onToggle}
+          onDelete={onDelete}
         />
       ))}
     </div>
@@ -252,11 +204,26 @@ type DeviceTileProps = {
   appliance: Appliance;
   loading: boolean;
   onToggle: (device: Appliance, status: "on" | "off") => void;
+  onDelete: (device: Appliance) => void;
 };
 
-function DeviceTile({ appliance, loading, onToggle }: DeviceTileProps) {
+function DeviceTile({ appliance, loading, onToggle, onDelete }: DeviceTileProps) {
   const isOn = appliance.status === "on";
   const icon = isOn ? Power : Lightbulb;
+
+  const formatUsage = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    }
+    return `${seconds}s`;
+  };
 
   return (
     <Card className="group flex h-full flex-col border-border/60 bg-card/80 backdrop-blur">
@@ -266,7 +233,7 @@ function DeviceTile({ appliance, loading, onToggle }: DeviceTileProps) {
             {appliance.name}
           </CardTitle>
           <CardDescription>
-            {isOn ? "Active" : "Standby"} • {new Date(appliance.created_at ?? Date.now()).toLocaleDateString()}
+            {isOn ? "Active" : "Standby"} • Registered: {new Date(appliance.created_at ?? Date.now()).toLocaleDateString()}
           </CardDescription>
         </div>
         <Badge variant={isOn ? "default" : "outline"} className="gap-1">
@@ -286,19 +253,25 @@ function DeviceTile({ appliance, loading, onToggle }: DeviceTileProps) {
         </div>
         <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/40 p-3">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Automation</p>
-            <p className="text-sm font-medium text-foreground">Follow home schedules</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Usage</p>
+            <p className="text-sm font-medium text-foreground">{formatUsage(appliance.total_usage_ms || 0)}</p>
           </div>
-          <Badge variant="secondary" className="gap-1">
-            <ShieldCheck className="h-3 w-3" />
-            Safe
-          </Badge>
         </div>
       </CardContent>
       <CardFooter className="flex items-center justify-between">
-        <Button variant="outline" size="sm" asChild>
-          <Link to={`/devices/${appliance.id}`}>View details</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/devices/${appliance.id}`}>View details</Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={() => onDelete(appliance)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{isOn ? "On" : "Off"}</span>
           <Switch
@@ -318,14 +291,4 @@ function EmptyState({ message }: { message: string }) {
       <p>{message}</p>
     </Card>
   );
-}
-
-type InsertApplianceInput = {
-  name: string;
-  home_id: number;
-};
-
-async function supabaseInsertAppliance({ name, home_id }: InsertApplianceInput) {
-  const { supabase } = await import("@/lib/supabaseClient");
-  return supabase.from("appliances").insert({ name, home_id });
 }
